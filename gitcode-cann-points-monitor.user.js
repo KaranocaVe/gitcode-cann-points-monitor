@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GitCode CANN Points Monitor
 // @namespace    https://github.com/KaranocaVe/gitcode-cann-points-monitor
-// @version      1.1.0
+// @version      1.1.1
 // @description  Show and monitor your CANN exclusive points with rate-limited checks.
 // @author       KaranocaVe
 // @match        https://gitcode.com/*
@@ -35,12 +35,32 @@
   });
 
   const formatPoints = (points) => Number(points).toLocaleString('en-US');
+  const hasPoints = (points) =>
+    points !== null && points !== undefined && Number.isSafeInteger(Number(points)) && Number(points) >= 0;
+
+  const badgeDetails = (points, checkedAt) => {
+    if (!hasPoints(points)) {
+      return {
+        value: '—',
+        title: 'CANN points have not been read yet. Click to open the CANN points page.',
+        label: 'CANN points: not read yet',
+      };
+    }
+    const value = formatPoints(points);
+    return {
+      value,
+      title: `CANN points: ${value}\nLast checked: ${new Date(checkedAt).toLocaleString()}`,
+      label: `CANN points: ${value}`,
+    };
+  };
 
   function placeHeaderBadge(points, checkedAt) {
+    const details = badgeDetails(points, checkedAt);
     const existing = document.getElementById(HEADER_BADGE_ID);
     if (existing) {
-      existing.querySelector('[data-cann-points-value]').textContent = formatPoints(points);
-      existing.title = `CANN points: ${formatPoints(points)}\nLast checked: ${new Date(checkedAt).toLocaleString()}`;
+      existing.querySelector('[data-cann-points-value]').textContent = details.value;
+      existing.title = details.title;
+      existing.setAttribute('aria-label', details.label);
       return true;
     }
 
@@ -56,8 +76,8 @@
     badge.id = HEADER_BADGE_ID;
     badge.href = CANN_POINTS_URL;
     badge.target = '_self';
-    badge.title = `CANN points: ${formatPoints(points)}\nLast checked: ${new Date(checkedAt).toLocaleString()}`;
-    badge.setAttribute('aria-label', `CANN points: ${formatPoints(points)}`);
+    badge.title = details.title;
+    badge.setAttribute('aria-label', details.label);
     Object.assign(badge.style, {
       alignItems: 'center',
       background: 'linear-gradient(135deg, #fff4e5, #ffe0b2)',
@@ -75,7 +95,7 @@
       whiteSpace: 'nowrap',
     });
     badge.innerHTML = 'CANN 积分 <span data-cann-points-value></span>';
-    badge.querySelector('[data-cann-points-value]').textContent = formatPoints(points);
+    badge.querySelector('[data-cann-points-value]').textContent = details.value;
     const avatar = host.querySelector('.g-user-avatar');
     if (avatar) avatar.before(badge);
     else host.append(badge);
@@ -83,7 +103,6 @@
   }
 
   function showHeaderBadge(points, checkedAt) {
-    if (points === null || points === undefined) return;
     if (placeHeaderBadge(points, checkedAt)) return;
 
     const observer = new MutationObserver(() => {

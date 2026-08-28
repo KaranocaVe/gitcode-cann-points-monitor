@@ -9,7 +9,7 @@ A Tampermonkey userscript that displays and watches the **CANN Exclusive Points*
 3. Visit the [CANN points page](https://gitcode.com/setting/points?type=shop&tid=cann) while signed in to GitCode.
 4. Allow browser notifications when Tampermonkey or the browser asks.
 
-The first successful observation only records a baseline. Once a baseline exists, a compact **CANN 积分** badge appears in the GitCode page header and links to the CANN points page. Later successful checks notify on any increase or decrease.
+The compact **CANN 积分** badge appears in the GitCode page header immediately. It initially shows `—`; open the CANN points page once to record a baseline and replace it with the current value. Later successful checks notify on any increase or decrease.
 
 ## Check schedule
 
