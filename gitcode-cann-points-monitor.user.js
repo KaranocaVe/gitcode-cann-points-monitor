@@ -1,10 +1,11 @@
 // ==UserScript==
 // @name         GitCode CANN Points Monitor
 // @namespace    https://github.com/KaranocaVe/gitcode-cann-points-monitor
-// @version      1.0.0
-// @description  Notify when your CANN exclusive points change, with rate-limited checks.
+// @version      1.1.0
+// @description  Show and monitor your CANN exclusive points with rate-limited checks.
 // @author       KaranocaVe
-// @match        https://gitcode.com/setting/points*
+// @match        https://gitcode.com/*
+// @run-at       document-idle
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_notification
@@ -22,6 +23,8 @@
   const DEFAULT_INTERVAL_MINUTES = 30;
   const POINTS_SELECTOR = '.cann-score-card__value';
   const CANN_LABEL = 'CANN Exclusive Points';
+  const HEADER_BADGE_ID = 'gitcode-cann-points-monitor-badge';
+  const CANN_POINTS_URL = 'https://gitcode.com/setting/points?type=shop&tid=cann';
 
   const isCannPointsPage = () =>
     location.pathname === '/setting/points' &&
@@ -32,6 +35,63 @@
   });
 
   const formatPoints = (points) => Number(points).toLocaleString('en-US');
+
+  function placeHeaderBadge(points, checkedAt) {
+    const existing = document.getElementById(HEADER_BADGE_ID);
+    if (existing) {
+      existing.querySelector('[data-cann-points-value]').textContent = formatPoints(points);
+      existing.title = `CANN points: ${formatPoints(points)}\nLast checked: ${new Date(checkedAt).toLocaleString()}`;
+      return true;
+    }
+
+    const header = document.querySelector(
+      'header, .gc-base-header, .gc-base-layout-header, [class*="layout-header"]',
+    );
+    if (!header) return false;
+
+    const host = header.querySelector(
+      '.g-toolbar-right, .gc-base-header-right, .header-right, [class*="header-right"], [class*="headerRight"]',
+    ) || header;
+    const badge = document.createElement('a');
+    badge.id = HEADER_BADGE_ID;
+    badge.href = CANN_POINTS_URL;
+    badge.target = '_self';
+    badge.title = `CANN points: ${formatPoints(points)}\nLast checked: ${new Date(checkedAt).toLocaleString()}`;
+    badge.setAttribute('aria-label', `CANN points: ${formatPoints(points)}`);
+    Object.assign(badge.style, {
+      alignItems: 'center',
+      background: 'linear-gradient(135deg, #fff4e5, #ffe0b2)',
+      border: '1px solid #ffb74d',
+      borderRadius: '999px',
+      color: '#9a4b00',
+      display: 'inline-flex',
+      fontSize: '12px',
+      fontWeight: '600',
+      gap: '5px',
+      lineHeight: '20px',
+      margin: '0 10px',
+      padding: '2px 9px',
+      textDecoration: 'none',
+      whiteSpace: 'nowrap',
+    });
+    badge.innerHTML = 'CANN 积分 <span data-cann-points-value></span>';
+    badge.querySelector('[data-cann-points-value]').textContent = formatPoints(points);
+    const avatar = host.querySelector('.g-user-avatar');
+    if (avatar) avatar.before(badge);
+    else host.append(badge);
+    return true;
+  }
+
+  function showHeaderBadge(points, checkedAt) {
+    if (points === null || points === undefined) return;
+    if (placeHeaderBadge(points, checkedAt)) return;
+
+    const observer = new MutationObserver(() => {
+      if (placeHeaderBadge(points, checkedAt)) observer.disconnect();
+    });
+    observer.observe(document.documentElement, { childList: true, subtree: true });
+    window.setTimeout(() => observer.disconnect(), 15_000);
+  }
 
   function extractCannPoints() {
     // Confirm the value belongs to the CANN card before using the stable value selector.
@@ -104,7 +164,9 @@
 
     const previous = await GM_getValue(LAST_POINTS_KEY, null);
     await GM_setValue(LAST_POINTS_KEY, current);
-    await GM_setValue(LAST_CHECKED_AT_KEY, Date.now());
+    const checkedAt = Date.now();
+    await GM_setValue(LAST_CHECKED_AT_KEY, checkedAt);
+    showHeaderBadge(current, checkedAt);
 
     if (previous !== null && Number(previous) !== current) {
       await notifyChange(Number(previous), current);
@@ -127,8 +189,11 @@
       return;
     }
     await GM_setValue(SETTINGS_KEY, { intervalMinutes: Math.floor(intervalMinutes) });
-    window.alert(`CANN points will be checked at most once every ${Math.floor(intervalMinutes)} minute(s) when this page is visited.`);
+    window.alert(`CANN points will be checked at most once every ${Math.floor(intervalMinutes)} minute(s) when the CANN points page is visited.`);
   });
 
+  const cachedPoints = await GM_getValue(LAST_POINTS_KEY, null);
+  const cachedCheckedAt = Number(await GM_getValue(LAST_CHECKED_AT_KEY, 0));
+  showHeaderBadge(cachedPoints, cachedCheckedAt);
   await check();
 })();

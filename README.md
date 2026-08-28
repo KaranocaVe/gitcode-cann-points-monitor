@@ -1,6 +1,6 @@
 # GitCode CANN Points Monitor
 
-A Tampermonkey userscript that watches the **CANN Exclusive Points** value on GitCode’s [CANN points page](https://gitcode.com/setting/points?type=shop&tid=cann). It stores the last value locally and shows a native browser notification when the value changes.
+A Tampermonkey userscript that displays and watches the **CANN Exclusive Points** value on GitCode. It stores the last value locally and shows a native browser notification when the value changes.
 
 ## Install
 
@@ -9,11 +9,11 @@ A Tampermonkey userscript that watches the **CANN Exclusive Points** value on Gi
 3. Visit the [CANN points page](https://gitcode.com/setting/points?type=shop&tid=cann) while signed in to GitCode.
 4. Allow browser notifications when Tampermonkey or the browser asks.
 
-The first successful observation only records a baseline. Later successful checks notify on any increase or decrease.
+The first successful observation only records a baseline. Once a baseline exists, a compact **CANN 积分** badge appears in the GitCode page header and links to the CANN points page. Later successful checks notify on any increase or decrease.
 
 ## Check schedule
 
-The default interval is 30 minutes. The script runs only on the CANN points page and checks at most once per interval, so repeated page visits do not repeatedly request or inspect the value. It does not run while the browser or target page is closed.
+The script runs on GitCode pages so it can display the stored total in the header. It only reads the live value on the CANN points page, and at most once per 30-minute default interval; repeated page visits do not repeatedly inspect the value. It does not run while the browser is closed.
 
 Use Tampermonkey’s menu to:
 
@@ -23,7 +23,7 @@ Use Tampermonkey’s menu to:
 ## Privacy and behavior
 
 - Reads the rendered CANN points value from the signed-in page; it does not submit forms, redeem items, or use credentials/API tokens.
-- Stores only the latest numeric point total, successful-check time, and chosen interval in Tampermonkey storage.
+- Stores only the latest numeric point total, successful-check time, and chosen interval in Tampermonkey storage. The header badge uses that stored value; it does not make a network request on other GitCode pages.
 - If GitCode’s page has not finished rendering within 15 seconds, the failed attempt does not advance the schedule.
 
 ## Development check
