@@ -13,7 +13,7 @@ The compact **CANN 积分** badge appears in the GitCode page header immediately
 
 ## Check schedule
 
-The script runs on GitCode pages so it can display the stored total in the header. It only reads the live value on the CANN points page, and at most once per 30-minute default interval; repeated page visits do not repeatedly inspect the value. It does not run while the browser is closed.
+The script runs on any GitCode page so it can display the stored total in the header and read the live CANN balance using the current logged-in browser session. It checks at most once per 30-minute default interval; repeated page visits do not repeatedly call the points API. It does not run while the browser is closed.
 
 Use Tampermonkey’s menu to:
 
@@ -22,7 +22,8 @@ Use Tampermonkey’s menu to:
 
 ## Privacy and behavior
 
-- Reads the rendered CANN points value from the signed-in page; it does not submit forms, redeem items, or use credentials/API tokens.
+- Reads the CANN balance from GitCode’s official points overview API using the current browser login; the target page’s rendered value remains a fallback. It does not submit forms or redeem items.
+- Reads the browser’s existing GitCode access token only for the live request; it never saves or logs the token.
 - Stores only the latest numeric point total, successful-check time, and chosen interval in Tampermonkey storage. The header badge uses that stored value; it does not make a network request on other GitCode pages.
 - If GitCode’s page has not finished rendering within 15 seconds, the failed attempt does not advance the schedule.
 

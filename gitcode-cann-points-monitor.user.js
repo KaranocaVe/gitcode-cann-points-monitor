@@ -10,6 +10,8 @@
 // @grant        GM_setValue
 // @grant        GM_notification
 // @grant        GM_registerMenuCommand
+// @grant        GM_xmlhttpRequest
+// @connect      web-api.gitcode.com
 // @downloadURL  https://raw.githubusercontent.com/KaranocaVe/gitcode-cann-points-monitor/main/gitcode-cann-points-monitor.user.js
 // @updateURL    https://raw.githubusercontent.com/KaranocaVe/gitcode-cann-points-monitor/main/gitcode-cann-points-monitor.user.js
 // ==/UserScript==
@@ -25,6 +27,7 @@
   const CANN_LABEL = 'CANN Exclusive Points';
   const HEADER_BADGE_ID = 'gitcode-cann-points-monitor-badge';
   const CANN_POINTS_URL = 'https://gitcode.com/setting/points?type=shop&tid=cann';
+  const CANN_OVERVIEW_URL = 'https://web-api.gitcode.com/score-proxy/api/v1/shop/third-party/overview';
 
   const isCannPointsPage = () =>
     location.pathname === '/setting/points' &&
@@ -153,6 +156,53 @@
     });
   }
 
+  function readAccessToken() {
+    try {
+      return window.localStorage.getItem('access_token');
+    } catch (error) {
+      console.warn('[CANN points monitor] Unable to read the GitCode access token.', error);
+      return null;
+    }
+  }
+
+  function fetchCannPointsFromApi() {
+    return new Promise((resolve) => {
+      const token = readAccessToken();
+      GM_xmlhttpRequest({
+        method: 'GET',
+        url: CANN_OVERVIEW_URL,
+        withCredentials: true,
+        headers: {
+          Accept: 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        timeout: 15_000,
+        onload: (response) => {
+          if (response.status < 200 || response.status >= 300) {
+            console.warn(`[CANN points monitor] Points API returned HTTP ${response.status}.`);
+            resolve(null);
+            return;
+          }
+          try {
+            const payload = JSON.parse(response.responseText);
+            const candidates = [
+              payload?.score_balance,
+              payload?.data?.score_balance,
+              payload?.data?.data?.score_balance,
+            ];
+            const points = candidates.find((value) => hasPoints(value));
+            resolve(points === undefined ? null : Number(points));
+          } catch (error) {
+            console.warn('[CANN points monitor] Points API returned invalid JSON.', error);
+            resolve(null);
+          }
+        },
+        onerror: () => resolve(null),
+        ontimeout: () => resolve(null),
+      });
+    });
+  }
+
   async function notifyChange(previous, current) {
     const delta = current - previous;
     const direction = delta > 0 ? 'increased' : 'decreased';
@@ -164,8 +214,6 @@
   }
 
   async function check({ force = false, source = 'page visit' } = {}) {
-    if (!isCannPointsPage()) return { status: 'wrong-page' };
-
     const settings = normalizeSettings(await GM_getValue(SETTINGS_KEY, {}));
     const lastCheckedAt = Number(await GM_getValue(LAST_CHECKED_AT_KEY, 0));
     const intervalMs = settings.intervalMinutes * 60_000;
@@ -175,9 +223,9 @@
       return { status: 'throttled' };
     }
 
-    const current = await waitForCannPoints();
+    const current = (await fetchCannPointsFromApi()) ?? (isCannPointsPage() ? await waitForCannPoints() : null);
     if (current === null) {
-      console.warn('[CANN points monitor] CANN points were not found; leaving the last successful check unchanged.');
+      console.warn('[CANN points monitor] CANN points could not be read; leaving the last successful check unchanged.');
       return { status: 'not-found' };
     }
 
