@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GitCode CANN Points Monitor
 // @namespace    https://github.com/KaranocaVe/gitcode-cann-points-monitor
-// @version      1.1.1
+// @version      1.2.0
 // @description  Show and monitor your CANN exclusive points with rate-limited checks.
 // @author       KaranocaVe
 // @match        https://gitcode.com/*
@@ -10,14 +10,16 @@
 // @grant        GM_setValue
 // @grant        GM_notification
 // @grant        GM_registerMenuCommand
-// @grant        GM_xmlhttpRequest
-// @connect      web-api.gitcode.com
+// @noframes
 // @downloadURL  https://raw.githubusercontent.com/KaranocaVe/gitcode-cann-points-monitor/main/gitcode-cann-points-monitor.user.js
 // @updateURL    https://raw.githubusercontent.com/KaranocaVe/gitcode-cann-points-monitor/main/gitcode-cann-points-monitor.user.js
 // ==/UserScript==
 
 (async () => {
   'use strict';
+
+  if (window.__gitcodeCannPointsMonitorRunning) return;
+  window.__gitcodeCannPointsMonitorRunning = true;
 
   const SETTINGS_KEY = 'settings';
   const LAST_CHECKED_AT_KEY = 'lastCheckedAt';
@@ -165,42 +167,36 @@
     }
   }
 
-  function fetchCannPointsFromApi() {
-    return new Promise((resolve) => {
-      const token = readAccessToken();
-      GM_xmlhttpRequest({
-        method: 'GET',
-        url: CANN_OVERVIEW_URL,
-        withCredentials: true,
-        headers: {
-          Accept: 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        timeout: 15_000,
-        onload: (response) => {
-          if (response.status < 200 || response.status >= 300) {
-            console.warn(`[CANN points monitor] Points API returned HTTP ${response.status}.`);
-            resolve(null);
-            return;
-          }
-          try {
-            const payload = JSON.parse(response.responseText);
-            const candidates = [
-              payload?.score_balance,
-              payload?.data?.score_balance,
-              payload?.data?.data?.score_balance,
-            ];
-            const points = candidates.find((value) => hasPoints(value));
-            resolve(points === undefined ? null : Number(points));
-          } catch (error) {
-            console.warn('[CANN points monitor] Points API returned invalid JSON.', error);
-            resolve(null);
-          }
-        },
-        onerror: () => resolve(null),
-        ontimeout: () => resolve(null),
-      });
+  async function fetchCannPointsFromApi() {
+    const token = readAccessToken();
+    const response = await window.fetch(CANN_OVERVIEW_URL, {
+      method: 'GET',
+      credentials: 'include',
+      headers: {
+        Accept: 'application/json',
+        'X-App-Version': '0',
+        'X-Platform': 'web',
+        'X-Device-Type': 'pc',
+        'X-App-Channel': 'gitcode-fe',
+        'X-Device-ID': 'unknown',
+        'page-uri': location.href,
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      signal: AbortSignal.timeout(15_000),
     });
+    if (!response.ok) {
+      const reason = response.status === 401 ? 'GitCode session is not logged in or has expired' : `HTTP ${response.status}`;
+      console.warn(`[CANN points monitor] Points API unavailable (${reason}); keeping the cached value.`);
+      return null;
+    }
+    const payload = await response.json();
+    const candidates = [
+      payload?.score_balance,
+      payload?.data?.score_balance,
+      payload?.data?.data?.score_balance,
+    ];
+    const points = candidates.find((value) => hasPoints(value));
+    return points === undefined ? null : Number(points);
   }
 
   async function notifyChange(previous, current) {
@@ -223,7 +219,13 @@
       return { status: 'throttled' };
     }
 
-    const current = (await fetchCannPointsFromApi()) ?? (isCannPointsPage() ? await waitForCannPoints() : null);
+    let current = null;
+    try {
+      current = await fetchCannPointsFromApi();
+    } catch (error) {
+      console.warn('[CANN points monitor] Points API request failed; leaving the last successful check unchanged.', error);
+    }
+    if (current === null && isCannPointsPage()) current = await waitForCannPoints();
     if (current === null) {
       console.warn('[CANN points monitor] CANN points could not be read; leaving the last successful check unchanged.');
       return { status: 'not-found' };
